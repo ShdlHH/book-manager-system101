@@ -19,3 +19,7 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: auto  # 主键自增
+
+jwt:
+  secret: todoSystemJwtSecretKey1234567890abcdef                  # 修改密钥
+  expire-time: 86400000             # 修改过期时间（毫秒）
