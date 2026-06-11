@@ -24,6 +24,10 @@ public class Result<T> {
     public static  <T> Result <T> success(){
         return new Result<>(200,"操作成功",null);
     }
+    //成功（自定义msg）
+    public static  <T> Result <T> success(String msg){
+        return new Result<>(200,msg,null);
+    }
     //失败
     public static  <T> Result <T> error(String msg){
         return new Result<>(500,msg,null);

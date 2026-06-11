@@ -2,12 +2,17 @@ package com.todo.todomanagementsystem.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.todo.todomanagementsystem.config.JwtConfig;
+import com.todo.todomanagementsystem.entity.SysUser;
 import com.todo.todomanagementsystem.entity.User;
 import com.todo.todomanagementsystem.exception.BusinessException;
+import com.todo.todomanagementsystem.service.SysUserService;
 import com.todo.todomanagementsystem.service.UserService;
 import com.todo.todomanagementsystem.mapper.UserMapper;
 import com.todo.todomanagementsystem.util.JwtUtil;
 import com.todo.todomanagementsystem.util.Result;
+import com.todo.todomanagementsystem.vo.UserInfoVO;
+import com.todo.todomanagementsystem.vo.UserVO;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -28,16 +33,45 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private SysUserService sysUserService;
+
+    @Override
+    public Result<?> logout() {
+        return Result.success("退出成功");
+    }
+
+    @Override
+    public Result<?> updateUser(String nickname, String phone, String password) {
+        Long userId = JwtConfig.currentUserId.get();
+        User user = getById(userId);
+        String username = user.getUsername();
+        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
+        sysUser.setNickname(nickname);
+        sysUser.setPhone(phone);
+        sysUser.setPassword(password);
+        sysUser.setUpdateTime(new Date());
+        user.setPassword(password);
+        updateById(user);
+        sysUserService.updateById(sysUser);
+
+        return Result.success("修改成功");
+    }
+
     @Override
     public Result<?> getUserInfo() {
         Long userId = JwtConfig.currentUserId.get();
         User user = getById(userId);
-        user.setPassword(null);
-        return Result.success(user);
+        String username = user.getUsername();
+        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
+        UserInfoVO userInfoVO = new UserInfoVO();
+        BeanUtils.copyProperties(sysUser,userInfoVO);
+        return Result.success(userInfoVO);
     }
 
     @Override
     public Result<?> login(String username, String password) {
+        UserVO userVO = new UserVO();
 //        查询用户
         User user = lambdaQuery().eq(User::getUsername, username)
                 .one();
@@ -46,6 +80,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         if (!(user.getPassword().equals(password))){
             throw new BusinessException("密码错误");
+        }
+//查询sys
+        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
+        if(sysUser != null){
+            BeanUtils.copyProperties(sysUser,userVO);
+        }
+        else {
+            BeanUtils.copyProperties(user,userVO);
         }
 
 //         生成jwt令牌
@@ -56,7 +98,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         map.put("token",token);
 //         密码脱敏返回
         user.setPassword(null);
-        map.put("user",user);
+        map.put("user",userVO);
         return Result.success(map);
     }
 
