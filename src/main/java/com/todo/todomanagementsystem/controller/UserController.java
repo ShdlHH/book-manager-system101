@@ -1,8 +1,12 @@
 package com.todo.todomanagementsystem.controller;
 
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.todo.todomanagementsystem.dto.UserPageDTO;
 import com.todo.todomanagementsystem.service.UserService;
 import com.todo.todomanagementsystem.util.Result;
+import com.todo.todomanagementsystem.vo.UserListVO;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -45,6 +49,17 @@ public class UserController {
     @PostMapping("/logout")
     public Result<?> logout(){
         return userService.logout();
+    }
+
+    /**
+     * 分页查询用户列表
+     * 权限：仅管理员
+     * @param dto 分页+查询条件
+     * @return 统一分页结果
+     */
+    @GetMapping("/page")
+    public Result<Page<UserListVO>> userPage(UserPageDTO dto) {
+        return userService.userPage(dto);
     }
 
 }

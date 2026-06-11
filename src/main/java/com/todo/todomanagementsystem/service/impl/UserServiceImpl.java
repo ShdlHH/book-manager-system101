@@ -1,7 +1,9 @@
 package com.todo.todomanagementsystem.service.impl;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.todo.todomanagementsystem.config.JwtConfig;
+import com.todo.todomanagementsystem.dto.UserPageDTO;
 import com.todo.todomanagementsystem.entity.SysUser;
 import com.todo.todomanagementsystem.entity.User;
 import com.todo.todomanagementsystem.exception.BusinessException;
@@ -11,6 +13,7 @@ import com.todo.todomanagementsystem.mapper.UserMapper;
 import com.todo.todomanagementsystem.util.JwtUtil;
 import com.todo.todomanagementsystem.util.Result;
 import com.todo.todomanagementsystem.vo.UserInfoVO;
+import com.todo.todomanagementsystem.vo.UserListVO;
 import com.todo.todomanagementsystem.vo.UserVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,12 +32,40 @@ import java.util.Map;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     implements UserService{
-
+    @Autowired
+    private SysUserService sysUserService;
     @Autowired
     private JwtUtil jwtUtil;
 
-    @Autowired
-    private SysUserService sysUserService;
+    @Override
+    public Result<Page<UserListVO>> userPage(UserPageDTO dto) {
+        Long userId = JwtConfig.currentUserId.get();
+        User user = getById(userId);
+        String username = user.getUsername();
+        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
+
+        if (sysUser == null || sysUser.getRole() != 1) {
+            throw new BusinessException("无权限访问");
+        }
+
+        Page<SysUser> page = new Page<>(dto.getPage(), dto.getSize());
+
+        Page<SysUser> sysUserPage = sysUserService.lambdaQuery()
+                .like(dto.getUsername() != null && !dto.getUsername().isEmpty(), SysUser::getUsername, dto.getUsername())
+                .like(dto.getNickname() != null && !dto.getNickname().isEmpty(), SysUser::getNickname, dto.getNickname())
+                .eq(SysUser::getRole,dto.getRole())
+                .page(page);
+
+        Page<UserListVO> resultPage = (Page<UserListVO>) sysUserPage.convert(item -> {
+            UserListVO vo = new UserListVO();
+            BeanUtils.copyProperties(item, vo);
+            if (item.getCreateTime() != null) {
+                vo.setCreateTime(item.getCreateTime().toString());
+            }
+            return vo;
+        });
+        return Result.success(resultPage);
+    }
 
     @Override
     public Result<?> logout() {
@@ -119,8 +150,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         return Result.success("注册成功");
     }
+
+
 }
-
-
-
-
