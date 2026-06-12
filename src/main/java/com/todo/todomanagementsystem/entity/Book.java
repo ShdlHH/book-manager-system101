@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import java.math.BigDecimal;
 import java.util.Date;
 import lombok.Data;
@@ -86,6 +87,12 @@ public class Book {
      */
     private Date updateTime;
 
+    /**
+     * 乐观锁版本号
+     */
+    @Version
+    private Integer version;
+
     @Override
     public boolean equals(Object that) {
         if (this == that) {
@@ -111,7 +118,8 @@ public class Book {
             && (this.getPrice() == null ? other.getPrice() == null : this.getPrice().equals(other.getPrice()))
             && (this.getStatus() == null ? other.getStatus() == null : this.getStatus().equals(other.getStatus()))
             && (this.getCreateTime() == null ? other.getCreateTime() == null : this.getCreateTime().equals(other.getCreateTime()))
-            && (this.getUpdateTime() == null ? other.getUpdateTime() == null : this.getUpdateTime().equals(other.getUpdateTime()));
+            && (this.getUpdateTime() == null ? other.getUpdateTime() == null : this.getUpdateTime().equals(other.getUpdateTime()))
+            && (this.getVersion() == null ? other.getVersion() == null : this.getVersion().equals(other.getVersion()));
     }
 
     @Override
@@ -132,6 +140,7 @@ public class Book {
         result = prime * result + ((getStatus() == null) ? 0 : getStatus().hashCode());
         result = prime * result + ((getCreateTime() == null) ? 0 : getCreateTime().hashCode());
         result = prime * result + ((getUpdateTime() == null) ? 0 : getUpdateTime().hashCode());
+        result = prime * result + ((getVersion() == null) ? 0 : getVersion().hashCode());
         return result;
     }
 
@@ -155,6 +164,7 @@ public class Book {
         sb.append(", status=").append(status);
         sb.append(", createTime=").append(createTime);
         sb.append(", updateTime=").append(updateTime);
+        sb.append(", version=").append(version);
         sb.append("]");
         return sb.toString();
     }

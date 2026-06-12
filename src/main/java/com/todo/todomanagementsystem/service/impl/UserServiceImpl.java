@@ -3,13 +3,16 @@ package com.todo.todomanagementsystem.service.impl;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.todo.todomanagementsystem.config.JwtConfig;
+import com.todo.todomanagementsystem.dto.UserAddDTO;
 import com.todo.todomanagementsystem.dto.UserPageDTO;
+import com.todo.todomanagementsystem.dto.UserStatusDTO;
+import com.todo.todomanagementsystem.dto.UserUpdateDTO;
+import com.todo.todomanagementsystem.entity.BorrowRecord;
 import com.todo.todomanagementsystem.entity.SysUser;
-import com.todo.todomanagementsystem.entity.User;
 import com.todo.todomanagementsystem.exception.BusinessException;
-import com.todo.todomanagementsystem.service.SysUserService;
+import com.todo.todomanagementsystem.mapper.SysUserMapper;
+import com.todo.todomanagementsystem.service.BorrowRecordService;
 import com.todo.todomanagementsystem.service.UserService;
-import com.todo.todomanagementsystem.mapper.UserMapper;
 import com.todo.todomanagementsystem.util.JwtUtil;
 import com.todo.todomanagementsystem.util.Result;
 import com.todo.todomanagementsystem.vo.UserInfoVO;
@@ -17,32 +20,146 @@ import com.todo.todomanagementsystem.vo.UserListVO;
 import com.todo.todomanagementsystem.vo.UserVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
-* @author shdl
-* @description 针对表【user(用户表)】的数据库操作Service实现
-* @createDate 2026-06-10 20:45:22
-*/
-
 @Service
-public class UserServiceImpl extends ServiceImpl<UserMapper, User>
-    implements UserService{
-    @Autowired
-    private SysUserService sysUserService;
+public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
+
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    @Lazy
+    private BorrowRecordService borrowRecordService;
+
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    @Transactional
+    @Override
+    public Result<?> deleteUser(Long id) {
+        String username = JwtConfig.currentUserName.get();
+        SysUser currentUser = lambdaQuery().eq(SysUser::getUsername, username).one();
+        if (currentUser == null || currentUser.getRole() != 1) {
+            throw new BusinessException("无权限操作");
+        }
+
+        SysUser sysUser = getById(id);
+        if (sysUser == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        if (sysUser.getId().equals(currentUser.getId())) {
+            throw new BusinessException("不能删除自己的账号");
+        }
+
+        long borrowCount = borrowRecordService.lambdaQuery()
+                .eq(BorrowRecord::getUserId, id)
+                .in(BorrowRecord::getStatus, 0, 3)
+                .count();
+        if (borrowCount > 0) {
+            throw new BusinessException("该用户存在未归还的借阅记录，无法删除");
+        }
+
+        removeById(id);
+        return Result.success("删除成功");
+    }
+
+    @Override
+    public Result<?> updateUserStatus(Long id, UserStatusDTO dto) {
+        String username = JwtConfig.currentUserName.get();
+        SysUser currentUser = lambdaQuery().eq(SysUser::getUsername, username).one();
+        if (currentUser == null || currentUser.getRole() != 1) {
+            throw new BusinessException("无权限操作");
+        }
+
+        SysUser sysUser = getById(id);
+        if (sysUser == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        if (dto.getStatus() != null && (dto.getStatus() == 0 || dto.getStatus() == 1)) {
+            sysUser.setStatus(dto.getStatus());
+            sysUser.setUpdateTime(new Date());
+            updateById(sysUser);
+        } else {
+            throw new BusinessException("无效的状态值，只能为0或1");
+        }
+
+        return Result.success(dto.getStatus() == 1 ? "用户已启用" : "用户已禁用");
+    }
+
+    @Transactional
+    @Override
+    public Result<?> updateUserByAdmin(Long id, UserUpdateDTO dto) {
+        String username = JwtConfig.currentUserName.get();
+        SysUser currentUser = lambdaQuery().eq(SysUser::getUsername, username).one();
+        if (currentUser == null || currentUser.getRole() != 1) {
+            throw new BusinessException("无权限操作");
+        }
+
+        SysUser sysUser = getById(id);
+        if (sysUser == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        if (dto.getNickname() != null) {
+            sysUser.setNickname(dto.getNickname());
+        }
+        if (dto.getRole() != null) {
+            sysUser.setRole(dto.getRole());
+        }
+        if (dto.getPhone() != null) {
+            sysUser.setPhone(dto.getPhone());
+        }
+        if (dto.getMaxBorrowNum() != null) {
+            sysUser.setMaxBorrowNum(dto.getMaxBorrowNum());
+        }
+        sysUser.setUpdateTime(new Date());
+
+        updateById(sysUser);
+        return Result.success("修改用户成功");
+    }
+
+    @Transactional
+    @Override
+    public Result<?> addUser(UserAddDTO dto) {
+        String username = JwtConfig.currentUserName.get();
+        SysUser currentUser = lambdaQuery().eq(SysUser::getUsername, username).one();
+        if (currentUser == null || currentUser.getRole() != 1) {
+            throw new BusinessException("无权限操作");
+        }
+
+        boolean exists = lambdaQuery().eq(SysUser::getUsername, dto.getUsername()).exists();
+        if (exists) {
+            throw new BusinessException("用户名已存在");
+        }
+
+        SysUser sysUser = new SysUser();
+        sysUser.setUsername(dto.getUsername());
+        sysUser.setPassword(passwordEncoder.encode(dto.getPassword()));
+        sysUser.setNickname(dto.getNickname());
+        sysUser.setRole(dto.getRole());
+        sysUser.setPhone(dto.getPhone());
+        sysUser.setMaxBorrowNum(dto.getMaxBorrowNum());
+        sysUser.setStatus(1);
+        sysUser.setCreateTime(new Date());
+        sysUser.setUpdateTime(new Date());
+        save(sysUser);
+
+        return Result.success("新增用户成功");
+    }
+
     @Override
     public Result<Page<UserListVO>> userPage(UserPageDTO dto) {
-        Long userId = JwtConfig.currentUserId.get();
-        User user = getById(userId);
-        String username = user.getUsername();
-        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
+        String username = JwtConfig.currentUserName.get();
+        SysUser sysUser = lambdaQuery().eq(SysUser::getUsername, username).one();
 
         if (sysUser == null || sysUser.getRole() != 1) {
             throw new BusinessException("无权限访问");
@@ -50,10 +167,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         Page<SysUser> page = new Page<>(dto.getPage(), dto.getSize());
 
-        Page<SysUser> sysUserPage = sysUserService.lambdaQuery()
+        Page<SysUser> sysUserPage = lambdaQuery()
                 .like(dto.getUsername() != null && !dto.getUsername().isEmpty(), SysUser::getUsername, dto.getUsername())
                 .like(dto.getNickname() != null && !dto.getNickname().isEmpty(), SysUser::getNickname, dto.getNickname())
-                .eq(SysUser::getRole,dto.getRole())
+                .eq(dto.getRole() != null, SysUser::getRole, dto.getRole())
                 .page(page);
 
         Page<UserListVO> resultPage = (Page<UserListVO>) sysUserPage.convert(item -> {
@@ -72,84 +189,89 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return Result.success("退出成功");
     }
 
+    @Transactional
     @Override
     public Result<?> updateUser(String nickname, String phone, String password) {
         Long userId = JwtConfig.currentUserId.get();
-        User user = getById(userId);
-        String username = user.getUsername();
-        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
-        sysUser.setNickname(nickname);
-        sysUser.setPhone(phone);
-        sysUser.setPassword(password);
+        if (userId == null) {
+            throw new BusinessException("用户未登录");
+        }
+
+        SysUser sysUser = getById(userId);
+        if (sysUser == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        if (nickname != null) {
+            sysUser.setNickname(nickname);
+        }
+        if (phone != null) {
+            sysUser.setPhone(phone);
+        }
+        if (password != null && !password.isEmpty()) {
+            sysUser.setPassword(passwordEncoder.encode(password));
+        }
         sysUser.setUpdateTime(new Date());
-        user.setPassword(password);
-        updateById(user);
-        sysUserService.updateById(sysUser);
+        updateById(sysUser);
 
         return Result.success("修改成功");
     }
 
     @Override
     public Result<?> getUserInfo() {
-        Long userId = JwtConfig.currentUserId.get();
-        User user = getById(userId);
-        String username = user.getUsername();
-        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
+        String username = JwtConfig.currentUserName.get();
+        SysUser sysUser = lambdaQuery().eq(SysUser::getUsername, username).one();
         UserInfoVO userInfoVO = new UserInfoVO();
-        BeanUtils.copyProperties(sysUser,userInfoVO);
+        BeanUtils.copyProperties(sysUser, userInfoVO);
         return Result.success(userInfoVO);
     }
 
     @Override
     public Result<?> login(String username, String password) {
-        UserVO userVO = new UserVO();
-//        查询用户
-        User user = lambdaQuery().eq(User::getUsername, username)
-                .one();
-        if (user == null){
+        SysUser sysUser = lambdaQuery().eq(SysUser::getUsername, username).one();
+
+        if (sysUser == null) {
             throw new BusinessException("用户名不存在");
         }
-        if (!(user.getPassword().equals(password))){
+
+        if (!passwordEncoder.matches(password, sysUser.getPassword())) {
             throw new BusinessException("密码错误");
         }
-//查询sys
-        SysUser sysUser = sysUserService.lambdaQuery().eq(SysUser::getUsername, username).one();
-        if(sysUser != null){
-            BeanUtils.copyProperties(sysUser,userVO);
-        }
-        else {
-            BeanUtils.copyProperties(user,userVO);
+
+        if (sysUser.getStatus() != 1) {
+            throw new BusinessException("用户已被禁用");
         }
 
-//         生成jwt令牌
-        String token = jwtUtil.creatToken(user.getId());
+        String token = jwtUtil.creatToken(sysUser.getId());
 
-//        封装返回数据
+        UserVO userVO = new UserVO();
+        BeanUtils.copyProperties(sysUser, userVO);
+
         Map<String, Object> map = new HashMap<>();
-        map.put("token",token);
-//         密码脱敏返回
-        user.setPassword(null);
-        map.put("user",userVO);
+        map.put("token", token);
+        map.put("user", userVO);
+
         return Result.success(map);
     }
 
+    @Transactional
     @Override
     public Result<?> register(String username, String password) {
-//        用户是否存在
-        boolean exists = lambdaQuery().eq(User::getUsername, username)
-                .exists();
+        boolean exists = lambdaQuery().eq(SysUser::getUsername, username).exists();
 
-//        不存在就新增用户
-        if(!exists){
-            User user = new User();
-            user.setUsername(username);
-            user.setPassword(password);
-            user.setCreateTime(new Date());
-            save(user);
+        if (!exists) {
+            SysUser sysUser = new SysUser();
+            sysUser.setUsername(username);
+            sysUser.setPassword(passwordEncoder.encode(password));
+            sysUser.setNickname(username);
+            sysUser.setRole(0);
+            sysUser.setStatus(1);
+            sysUser.setMaxBorrowNum(5);
+            sysUser.setCreateTime(new Date());
+            sysUser.setUpdateTime(new Date());
+            save(sysUser);
         }
 
         return Result.success("注册成功");
     }
-
-
 }
