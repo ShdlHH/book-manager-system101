@@ -3,6 +3,9 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
+  optimizeDeps: {
+    include: ['vue', 'vue-router', 'pinia', 'axios', 'dayjs', 'echarts', 'element-plus', '@element-plus/icons-vue']
+  },
   server: {
     port: 5173,
     proxy: {

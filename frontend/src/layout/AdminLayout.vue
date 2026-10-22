@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { ElMessageBox } from 'element-plus'
@@ -8,14 +8,25 @@ import { message } from '../utils/globalMessage'
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
-const activeMenu = ref('/book')
 
-const menuItems = [
-  { index: '/book', title: '图书管理', icon: 'Reading' }
-]
+const activeMenu = computed(() => route.path)
+
+const menuItems = computed(() => {
+  const items = [
+    { index: '/dashboard', title: '数据看板', icon: 'DataLine' },
+    { index: '/book', title: '图书管理', icon: 'Reading' },
+    { index: '/borrow', title: '借阅管理', icon: 'Tickets' },
+    { index: '/category', title: '分类管理', icon: 'Files' },
+    { index: '/todo', title: '待办事项', icon: 'List' }
+  ]
+  if (userStore.isAdmin) {
+    items.push({ index: '/user', title: '用户管理', icon: 'UserFilled' })
+  }
+  items.push({ index: '/profile', title: '个人信息', icon: 'User' })
+  return items
+})
 
 onMounted(async () => {
-  activeMenu.value = route.path
   if (!userStore.userInfo) {
     try {
       await userStore.fetchUserInfo()
@@ -29,14 +40,20 @@ function handleSelect(index) {
   router.push(index)
 }
 
-async function handleLogout() {
-  try {
-    await ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning' })
-    await userStore.logout()
-    message.success('已退出登录')
-    router.push('/login')
-  } catch (e) {
-    // 取消
+async function handleCommand(command) {
+  if (command === 'profile') {
+    router.push('/profile')
+    return
+  }
+  if (command === 'logout') {
+    try {
+      await ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning' })
+      await userStore.logout()
+      message.success('已退出登录')
+      router.push('/login')
+    } catch (e) {
+      // 取消
+    }
   }
 }
 </script>
@@ -64,7 +81,7 @@ async function handleLogout() {
     <el-container>
       <el-header style="background: #fff; border-bottom: 1px solid #e6e6e6; display: flex; align-items: center; justify-content: space-between">
         <span style="font-size: 16px; color: #303133">{{ route.meta.title }}</span>
-        <el-dropdown @command="handleLogout">
+        <el-dropdown @command="handleCommand">
           <span style="cursor: pointer">
             <el-icon><User /></el-icon>
             {{ userStore.username || '用户' }}
@@ -72,6 +89,7 @@ async function handleLogout() {
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item command="profile">个人信息</el-dropdown-item>
               <el-dropdown-item command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
